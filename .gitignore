@@ -1,0 +1,15 @@
+# 构建中间产物
+build/
+dist/
+*.spec.bak
+.venv_build/
+.venv_run/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# macOS 系统文件
+.DS_Store
+._*
