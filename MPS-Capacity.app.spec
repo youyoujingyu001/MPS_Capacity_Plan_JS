@@ -14,6 +14,8 @@ base = os.path.abspath('.')
 datas = []
 # 核心脚本打包进去 (GUI 通过 sys.argv[0] 同目录引用)
 datas.append((os.path.join(base, 'MPS-Capacity_V2.0.py'), '.'))
+# pandas 的 data 目录 (有 i18n / 时区数据); 2 元组由 Analysis 自动转为 3 元组
+datas += collect_data_files('pandas')
 
 hiddenimports = [
     'openpyxl', 'et_xmlfile',
@@ -39,9 +41,6 @@ a = Analysis(
     cipher=block_cipher,
     noarchive=False,
 )
-
-# 收 pandas 的 data 目录 (有 i18n / 时区数据)
-a.datas += collect_data_files('pandas')
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
