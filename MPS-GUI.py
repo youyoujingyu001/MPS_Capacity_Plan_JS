@@ -123,6 +123,7 @@ class App(tk.Tk):
         self.role_rows = []
         self.log_q = queue.Queue()
         self.busy = False
+        self.status = tk.StringVar(value='就绪')
         self.core_path = find_core()
         self._build()
         self._refresh()
@@ -161,7 +162,6 @@ class App(tk.Tk):
         self.run_btn.pack(side='left')
         ttk.Button(btns, text='清空日志',
                    command=lambda: self.log_text.delete('1.0', 'end')).pack(side='left', padx=6)
-        self.status = tk.StringVar(value='就绪')
         ttk.Label(btns, textvariable=self.status).pack(side='right')
 
         log_frm = ttk.LabelFrame(self, text='运行日志')
