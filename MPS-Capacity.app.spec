@@ -57,7 +57,8 @@ exe = EXE(
     console=False,   # 纯窗口 App: 不弹终端窗口 (核心脚本在进程内 import, 日志显示在 GUI 里)
     disable_windowed_traceback=False,
     argv_emulation=False,
-    target_arch='arm64',  # Apple Silicon
+    # 目标架构由 CI 环境变量 TARGET_ARCH 决定 (arm64 / x86_64); 未设置时用当前构建机架构
+    target_arch=os.environ.get('TARGET_ARCH') or None,
     codesign_identity=None,
     entitlements_file=None,
 )
@@ -82,5 +83,6 @@ app = BUNDLE(
         'NSHighResolutionCapable': True,
         'LSUIElement': False,
         'NSRequiresAquaSystemAppearance': False,
+        'LSMinimumSystemVersion': '12.0',
     },
 )
