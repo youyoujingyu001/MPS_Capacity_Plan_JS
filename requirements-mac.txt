@@ -1,4 +1,7 @@
 pandas==3.0.6
-numpy==2.5.4
+# numpy 2.x 的 macOS x86_64 wheel 要求 macOS>=14 (链接 Accelerate ILP64 符号),
+# 老 Intel 机型 (Monterey 12.x) 会报 Symbol not found: _cblas_caxpy$NEWLAPACK$ILP64
+# 因此固定到 1.26.4 (OpenBLAS, 兼容 macOS 10.14+)
+numpy==1.26.4
 openpyxl>=3.1.5
 et_xmlfile>=2.0.0

@@ -76,7 +76,11 @@ jobs:
       - name: Ad-hoc codesign (绕过 Gatekeeper)
         run: codesign --force --sign - dist/MPS-Capacity.app && codesign --verify --deep --verbose=2 dist/MPS-Capacity.app
 
-      - name: Smoke test core script (导入 + 版本)
+      - name: Smoke test (验证 numpy + pandas 可导入)
+        run: |
+          python -c "import numpy, pandas; print('numpy', numpy.__version__, '| pandas', pandas.__version__)"
+
+      - name: Smoke test core script (打印 USAGE)
         run: python MPS-Capacity_V2.0.py 2>&1 | head -5 || true
 
       - name: Zip the .app (保留符号链接)
