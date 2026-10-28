@@ -602,26 +602,44 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
         res_u = res.upper()
 
         if src == 'sub':
-            if proc == 'FATP':
-                # 资源编码含 -L/-R 选 Left/Right 页, 否则 Case 页
-                if '-L' in res_u:
+            # 兼容制程段列直接填 Case / Buds-L / Buds-R 的 mapping 表:
+            #   显式 FATP / SUB 优先; 否则按"哪组行号列有值"判定数据源
+            #     H 列(iloc[7]) = FATP Capacity 的 Input 行号
+            #     F 列(iloc[5]) = SMT&Sub Capacity 的 Input 行号
+            proc_u = proc.upper()
+            fatp_in, sub_in = pn(mr.iloc[7]), pn(mr.iloc[5])
+            if proc_u == 'FATP':
+                is_fatp = True
+            elif proc_u == 'SUB':
+                is_fatp = False
+            elif fatp_in is not None and sub_in is None:
+                is_fatp = True
+            elif sub_in is not None and fatp_in is None:
+                is_fatp = False
+            elif fatp_in is not None and sub_in is not None:
+                is_fatp = 'BUDS' not in proc_u   # 两组都有值: Buds 归 SMT&Sub, 其余归 FATP
+            else:
+                return                              # 非 FATP/SUB 且无行号, 跳过
+
+            if is_fatp:
+                # FATP Capacity: 制程段/资源编码含 L/R 选 Left/Right 页, 否则 Case 页
+                # (兼容 Buds-L / Buds-R 直接写在制程段列)
+                if '-L' in proc_u or '-L' in res_u:
                     pg, wc, uc, ec, yc, in_c = 'Left',  25, 31, 37, 43, 7
-                elif '-R' in res_u:
+                elif '-R' in proc_u or '-R' in res_u:
                     pg, wc, uc, ec, yc, in_c = 'Right', 27, 33, 39, 45, 7
                 else:
                     pg, wc, uc, ec, yc, in_c = 'Case',  29, 35, 41, 47, 7
                 fp, fp_d2c, capf = fatp_fp, fatp_fp_d2c, path_fatp
                 drow, scol, vcol = 2, 3, 3              # Left/Right/Case: 日期行2 自列3
-            elif proc == 'SUB':
-                # 资源编码含 L/R 用 Buds Assumption, 否则 Case Assumption
+            else:
+                # SMT&Sub: Buds-L/Buds-R 或资源编码含 L/R 用 Buds Assumption, 否则 Case Assumption
                 if is_lr(proc, res):
                     pg, wc, uc, ec, yc, in_c = 'Buds Assumption', 9, 13, 17, 21, 5
                 else:
                     pg, wc, uc, ec, yc, in_c = 'Case Assumption', 11, 15, 19, 23, 5
                 fp, fp_d2c, capf = smt_fp, smt_fp_d2c, path_smt
                 drow, scol, vcol = 4, 4, 4              # Assumption: 日期行4 自列4
-            else:
-                return                                  # 非 FATP/SUB 跳过
         else:  # src == 'smt'  (SMT Mapping 表内所有制程段)
             # 制程段名/资源编码含 L/R 用 Buds Assumption, 否则 Case Assumption
             # (列号同 SUB 逻辑左移2列; 兼容 A5-3F-H36aL-P2i 这类 L/R 不带连字符的资源编码)
