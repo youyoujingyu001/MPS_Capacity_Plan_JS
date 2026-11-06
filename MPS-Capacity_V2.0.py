@@ -25,6 +25,10 @@ V2.0 合并与口径变更:
     两个模式统一生效
   - 校验(UPH<300 / Input超限)仍基于源文件"当日原始 UPH", 不受上面改动影响
 
+V2.2 更新:
+  - fatp 模式 Sub-FATP-Mapping 制程段列支持 FATP 细分: 显式填
+    Buds-L / Buds-R / Case 时直接归 FATP Capacity, 分别取 Left / Right / Case 页
+
 ==========================================================================
 原 MPS-Capacity_core_V1.1.py 版本记录:
 V1.1 更新:
@@ -549,6 +553,10 @@ def is_lr(proc, res):
     return ('-L' in pu) or ('-R' in pu) or ('-L' in ru) or ('-R' in ru)
 
 
+# FATP 制程段在实际业务中拆分为三个细分制程段, 对应 FATP Capacity 的 Left/Right/Case 页
+FATP_DETAIL_PROCS = {'BUDS-L', 'BUDS-R', 'CASE'}
+
+
 def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_map=None):
     print("读取文件...")
     sub_map = pd.read_excel(path_sub_map, engine='openpyxl')
@@ -608,7 +616,9 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
             #     F 列(iloc[5]) = SMT&Sub Capacity 的 Input 行号
             proc_u = proc.upper()
             fatp_in, sub_in = pn(mr.iloc[7]), pn(mr.iloc[5])
-            if proc_u == 'FATP':
+            if proc_u in FATP_DETAIL_PROCS:
+                is_fatp = True                      # FATP 细分: Buds-L/Buds-R/Case 直接归 FATP
+            elif proc_u == 'FATP':
                 is_fatp = True
             elif proc_u == 'SUB':
                 is_fatp = False
