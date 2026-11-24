@@ -692,16 +692,16 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
             ef = val_at(cap, d2c, e0, td)
 
             if inp is None: continue
-            if wt is None or wt == 0: continue      # 工时为0不输出
 
-            # 校验(基于原始值)
-            if wt > 20: iss['W/H全天>20'].append((proc, res, td, wt))
-            if up is not None and up < 300: iss['UPH<300'].append((proc, res, td, up))
-            if yl is not None and yl > 1: iss['良率>1'].append((proc, res, td, yl))
-            if inp > 0 and wt and up and up > 0:
-                lm = wt * up
-                if inp > lm * 1.02:
-                    iss['Input超限'].append((proc, res, td, round(inp, 0), round(lm, 0)))
+            # 校验(基于原始值; 产能参数缺失时跳过校验, Input 仍保留用于后续加总)
+            if wt is not None and wt != 0:
+                if wt > 20: iss['W/H全天>20'].append((proc, res, td, wt))
+                if up is not None and up < 300: iss['UPH<300'].append((proc, res, td, up))
+                if yl is not None and yl > 1: iss['良率>1'].append((proc, res, td, yl))
+                if inp > 0 and up and up > 0:
+                    lm = wt * up
+                    if inp > lm * 1.02:
+                        iss['Input超限'].append((proc, res, td, round(inp, 0), round(lm, 0)))
 
             day_data.append([td, inp, wt, up, yl, ef])
 
@@ -719,6 +719,8 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
                     day_data[jmax][1] += delta
 
         for td, inp, wt, up, yl, ef in day_data:
+            if wt is None or wt == 0:
+                continue
             # 单班工时 = 全天工时/2, 再按整班次取整(<8按8, 8~9按9, 9~10按10, >10按10)
             wh_raw = wt / 2.0
             wh_h = norm_wh(wh_raw)
@@ -779,22 +781,38 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
             if d:
                 emit_rows(*d)
             continue
-        merged = {}
-        meta = None
+
+        pieces = []
         for mr in mrs:
             d = build_day_data(mr, 'smt')
-            if not d:
+            if d:
+                pieces.append(d)
+        if not pieces:
+            continue
+
+        # 产能参数来源: 第一条 mu 非 None 的 mapping (即"维护了产能参数"的那条)
+        ref = next((p for p in pieces if p[4] is not None), pieces[0])
+        proc, mdl, res, sz, mu = ref[0], ref[1], ref[2], ref[3], ref[4]
+        ref_cap = {td: (wt, up, yl, ef) for td, inp, wt, up, yl, ef in ref[5]}
+
+        # Input 按日期加总
+        merged_inp = {}
+        for p in pieces:
+            for td, inp, wt, up, yl, ef in p[5]:
+                merged_inp[td] = merged_inp.get(td, 0.0) + inp
+
+        # 用 ref 的产能参数 + 加总的 Input 构造 day_data
+        merged_dd = []
+        for td in sorted(merged_inp):
+            r = ref_cap.get(td)
+            if r is None:
                 continue
-            proc, mdl, res, sz, mu, dd = d
-            if meta is None:
-                meta = (proc, mdl, res, sz, mu)
-            for td, inp, wt, up, yl, ef in dd:
-                if td not in merged:
-                    merged[td] = [0.0, wt, up, yl, ef]
-                merged[td][0] += inp
-        if meta is not None:
-            proc, mdl, res, sz, mu = meta
-            merged_dd = [[td, v[0], v[1], v[2], v[3], v[4]] for td, v in sorted(merged.items())]
+            wt, up, yl, ef = r
+            if wt is None or wt == 0:
+                continue
+            merged_dd.append([td, merged_inp[td], wt, up, yl, ef])
+
+        if merged_dd:
             emit_rows(proc, mdl, res, sz, mu, merged_dd)
 
     cols = ['主计划版本号', '机种', '制程段', '物品类型', '资源类型', '尺寸',
