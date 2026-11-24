@@ -89,11 +89,11 @@ from datetime import datetime, date, timedelta
 
 # ============================================================
 # 日期起点设置
-#   None  -> 不过滤: 从源数据文件中最早的日期开始生成 (含历史数据)  <- V2.0 默认
-#   True  -> 只生成"今天及以后"的日期行 (含今天)
+#   None  -> 不过滤: 从源数据文件中最早的日期开始生成 (含历史数据)
+#   True  -> 只生成"今天及以后"的日期行 (含今天)  <- 当前默认
 #   False -> 只生成"明天及以后"的日期行 (不含今天)
 # ============================================================
-INCLUDE_TODAY = None
+INCLUDE_TODAY = True
 
 # ============================================================
 # 工作时间(小时) 班次取整设置 (仅 prelaser 模式使用; fatp 模式恒开启取整)
@@ -677,6 +677,7 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
 
         # 先收集该线所有有效日期数据, 再统一取整 + 余数平衡
         day_data = []
+        cap_map = {}
         for td in sorted(d2c):
             # Input: For Plan 页按日期匹配
             inp = None
@@ -690,6 +691,8 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
             up = val_at(cap, d2c, u0, td)
             yl = val_at(cap, d2c, y0, td)
             ef = val_at(cap, d2c, e0, td)
+
+            cap_map[td] = (wt, up, yl, ef)
 
             if inp is None: continue
 
@@ -705,9 +708,9 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
 
             day_data.append([td, inp, wt, up, yl, ef])
 
-        if not day_data:
+        if not day_data and mu is None:
             return None
-        return (proc, mdl, res, sz, mu, day_data)
+        return (proc, mdl, res, sz, mu, day_data, cap_map)
 
     def emit_rows(proc, mdl, res, sz, mu, day_data):
         # 取整余数平衡 - 逐日 round 的累计误差集中调整到该线 Input 最大的一天
@@ -769,7 +772,7 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
     for _, mr in sub_map.iterrows():
         d = build_day_data(mr, 'sub')
         if d:
-            emit_rows(*d)
+            emit_rows(*d[:6])
 
     smt_groups = {}
     for _, mr in smt_map.iterrows():
@@ -779,7 +782,7 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
         if len(mrs) == 1:
             d = build_day_data(mrs[0], 'smt')
             if d:
-                emit_rows(*d)
+                emit_rows(*d[:6])
             continue
 
         pieces = []
@@ -793,7 +796,6 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
         # 产能参数来源: 第一条 mu 非 None 的 mapping (即"维护了产能参数"的那条)
         ref = next((p for p in pieces if p[4] is not None), pieces[0])
         proc, mdl, res, sz, mu = ref[0], ref[1], ref[2], ref[3], ref[4]
-        ref_cap = {td: (wt, up, yl, ef) for td, inp, wt, up, yl, ef in ref[5]}
 
         # Input 按日期加总
         merged_inp = {}
@@ -801,16 +803,23 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
             for td, inp, wt, up, yl, ef in p[5]:
                 merged_inp[td] = merged_inp.get(td, 0.0) + inp
 
-        # 用 ref 的产能参数 + 加总的 Input 构造 day_data
+        # 构造合并后的 day_data:
+        #   工时 = 各 mapping 工时行按日期加总值 (空/0 当作 0, 不影响其他项取值)
+        #   UPH/效率/良率 = 取 ref (第一条有产能参数的 mapping)
         merged_dd = []
         for td in sorted(merged_inp):
-            r = ref_cap.get(td)
+            wt_sum = 0.0
+            for p in pieces:
+                cap = p[6].get(td)
+                if cap is not None and cap[0] is not None and cap[0] != 0:
+                    wt_sum += cap[0]
+            if wt_sum == 0:
+                continue
+            r = ref[6].get(td)
             if r is None:
                 continue
-            wt, up, yl, ef = r
-            if wt is None or wt == 0:
-                continue
-            merged_dd.append([td, merged_inp[td], wt, up, yl, ef])
+            up, yl, ef = r[1], r[2], r[3]
+            merged_dd.append([td, merged_inp[td], wt_sum, up, yl, ef])
 
         if merged_dd:
             emit_rows(proc, mdl, res, sz, mu, merged_dd)
