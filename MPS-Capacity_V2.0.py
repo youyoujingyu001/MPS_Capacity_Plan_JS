@@ -602,7 +602,7 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
     upu_hit, upu_miss_seen, upu_miss = set(), set(), []
     wh_adj = {'<8->8': 0, '8~9->9': 0, '9~10->10': 0, '>10->10': 0, '不变': 0}
 
-    def handle(mr, src):
+    def build_day_data(mr, src):
         proc = str(mr.iloc[1]).strip()
         mdl = str(mr.iloc[0]).strip() if pd.notna(mr.iloc[0]) else ''
         res = str(mr.iloc[3]).strip()
@@ -705,6 +705,11 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
 
             day_data.append([td, inp, wt, up, yl, ef])
 
+        if not day_data:
+            return None
+        return (proc, mdl, res, sz, mu, day_data)
+
+    def emit_rows(proc, mdl, res, sz, mu, day_data):
         # 取整余数平衡 - 逐日 round 的累计误差集中调整到该线 Input 最大的一天
         if day_data:
             delta = round(sum(d[1] for d in day_data)) - sum(round(d[1]) for d in day_data)
@@ -760,9 +765,37 @@ def run_fatp_sub_smt(path_smt_map, path_sub_map, path_fatp, path_smt, path_upu_m
                 })
 
     for _, mr in sub_map.iterrows():
-        handle(mr, 'sub')
+        d = build_day_data(mr, 'sub')
+        if d:
+            emit_rows(*d)
+
+    smt_groups = {}
     for _, mr in smt_map.iterrows():
-        handle(mr, 'smt')
+        smt_groups.setdefault(str(mr.iloc[3]).strip(), []).append(mr)
+
+    for mrs in smt_groups.values():
+        if len(mrs) == 1:
+            d = build_day_data(mrs[0], 'smt')
+            if d:
+                emit_rows(*d)
+            continue
+        merged = {}
+        meta = None
+        for mr in mrs:
+            d = build_day_data(mr, 'smt')
+            if not d:
+                continue
+            proc, mdl, res, sz, mu, dd = d
+            if meta is None:
+                meta = (proc, mdl, res, sz, mu)
+            for td, inp, wt, up, yl, ef in dd:
+                if td not in merged:
+                    merged[td] = [0.0, wt, up, yl, ef]
+                merged[td][0] += inp
+        if meta is not None:
+            proc, mdl, res, sz, mu = meta
+            merged_dd = [[td, v[0], v[1], v[2], v[3], v[4]] for td, v in sorted(merged.items())]
+            emit_rows(proc, mdl, res, sz, mu, merged_dd)
 
     cols = ['主计划版本号', '机种', '制程段', '物品类型', '资源类型', '尺寸',
             '资源编码', '白/夜班', '日期', '工作时间(小时)', '目标UPH',
